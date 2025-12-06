@@ -1,0 +1,561 @@
+---
+title: "lab4"
+format:
+  md:
+    output-file: README.md
+---
+
+## Цель работы
+ 1. Зекрепить практические навыки использования языка программирования R для
+ обработки данных
+ 2. Закрепить знания основных функций обработки данных экосистемы `tidyverse` 
+языка R
+ 3. Закрепить навыки исследования метаданных DNS трафика
+
+## Исходные данные
+
+1.  Программное обеспечение Windows 10 Pro
+2.  Visual Studio Code с установленными плагинами для работы с языком R
+3.  Интерпретатор языка R 4.5.2
+
+## План
+
+1.  Импортировать данные DNS
+2.  Добавить пропущенные данные о структуре данных (назначении столбцов)
+3.  Преобразовать данные в столбцах в нужный формат
+4.  Просмотреть общую структуру данных с помощью функции glimpse()
+5.  Проанализировать данные
+
+## Шаги:
+
+Подготовка данных
+ 1. Импортируйте данные DNS 
+https://storage.yandexcloud.net/dataset.ctfsec/dns.zip
+ 2. Добавьте пропущенные данные о структуре данных (назначении столбцов)
+
+```{r}
+library(httr)
+library(jsonlite)
+library(readr)
+library(dplyr)
+library(archive)
+library(stringr)
+library(knitr)
+```
+
+```{r}
+
+zip_path <- 'D:/Downloads/dns.zip' 
+
+
+con <- archive_read(zip_path, file = "dns.log", format = "zip")
+col_names <- c(
+      "timestamp", "uid", "source_ip", "source_port", "destination_ip", 
+  "destination_port", "protocol", "transaction_id", "query", "qclass", 
+  "qclass_name", "qtype", "qtype_name", "rcode", "rcode_name", 
+  "AA", "TC", "RD", "RA", "Z", "answers", "TTLS", "rejected"
+    )
+dns <- read_tsv(
+  file = con,
+  col_names = col_names,
+  na = c("-", "(empty)"),
+  comment = "#"
+) %>%
+  mutate(timestamp = as.POSIXct(timestamp, origin = "1970-01-01", tz = "UTC"))
+
+```
+ ```
+ Rows: 427935 Columns: 23
+── Column specification ─────────────────────────────────────────────────────────────────────────
+Delimiter: "\t"
+chr (10): uid, id.orig_h, id.resp_h, proto, rtt, qclass, qtype, rcode, Z, answers
+dbl  (8): ts, id.orig_p, id.resp_p, trans_id, query, qclass_name, qtype_name, RA
+lgl  (5): rcode_name, AA, TC, RD, TTLs
+
+ℹ Use `spec()` to retrieve the full column specification for this data.
+ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+ ```
+ 
+ 3. Преобразуйте данные в столбцах в нужный формат
+ 4. Просмотрите общую структуру данных с помощью функции 
+glimpse()
+```{r}
+    library(tibble)
+
+    glimpse(dns)
+```
+```
+
+Rows: 427,935
+Columns: 23
+$ timestamp        <dttm> 2012-03-16 12:30:05, 2012-03-16 12:30:15, 2012-03-16 12:30:15, 2012-0…
+$ uid              <chr> "CWGtK431H9XuaTN4fi", "C36a282Jljz7BsbGH", "C36a282Jljz7BsbGH", "C36a2…
+$ source_ip        <chr> "192.168.202.100", "192.168.202.76", "192.168.202.76", "192.168.202.76…
+$ source_port      <dbl> 45658, 137, 137, 137, 137, 137, 137, 137, 137, 137, 137, 137, 137, 456…
+$ destination_ip   <chr> "192.168.27.203", "192.168.202.255", "192.168.202.255", "192.168.202.2…
+$ destination_port <dbl> 137, 137, 137, 137, 137, 137, 137, 137, 137, 137, 137, 137, 137, 5353,…
+$ protocol         <chr> "udp", "udp", "udp", "udp", "udp", "udp", "udp", "udp", "udp", "udp", …
+$ transaction_id   <dbl> 33008, 57402, 57402, 57402, 57398, 57398, 57398, 62187, 62187, 62187, …
+$ query            <chr> "*\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x…
+$ qclass           <dbl> 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1…
+$ qclass_name      <chr> "C_INTERNET", "C_INTERNET", "C_INTERNET", "C_INTERNET", "C_INTERNET", …
+$ qtype            <dbl> 33, 32, 32, 32, 32, 32, 32, 32, 32, 32, 33, 33, 33, 12, 12, 33, 32, 32…
+$ qtype_name       <chr> "SRV", "NB", "NB", "NB", "NB", "NB", "NB", "NB", "NB", "NB", "SRV", "S…
+$ rcode            <dbl> 0, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, NA, NA, …
+$ rcode_name       <chr> "NOERROR", NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, "NO…
+$ AA               <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, …
+$ TC               <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, …
+$ RD               <lgl> FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FA…
+$ RA               <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, …
+$ Z                <dbl> 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0…
+$ answers          <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA…
+$ TTLS             <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA…
+$ rejected         <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, …
+```
+
+## Анализ
+
+Сколько участников информационного обмена в сети Доброй Организации?
+
+```{r}
+unique_source_ips <- unique(dns$source_ip)
+unique_destination_ips <- unique(dns$destination_ip)
+all_ips<-unique(c(unique_source_ips, unique_destination_ips))
+length(all_ips)
+```
+```
+[1] 1359
+```
+
+Какое соотношение участников обмена внутри сети и участников обращений к внешним ресурсам?
+
+```{r}
+internal_ips <- all_ips[grepl("^(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)", all_ips)]
+external_ips <- all_ips[!grepl("^(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)", all_ips)]
+
+cat("Соотношение внутренних/внешних обращений:", round(length(internal_ips) / length(external_ips), 3), "\n")
+```
+
+```
+Соотношение внутренних/внешних обращений: 13.772  
+```
+
+Найдите топ-10 участников сети, проявляющих наибольшую сетевую активность
+
+```{r}
+dns%>%
+  group_by(source_ip)%>%
+  count(sort = TRUE) %>%
+  as_tibble() %>%
+  head(10)
+```
+```
+source_ip
+<chr>
+n
+<int>
+10.10.117.210	75943			
+192.168.202.93	26522			
+192.168.202.103	18121			
+192.168.202.76	16978			
+192.168.202.97	16176			
+192.168.202.141	14967			
+10.10.117.209	14222			
+192.168.202.110	13372			
+192.168.203.63	12148			
+192.168.202.106	10784	
+```
+
+
+Найдите топ-10 доменов, к которым обращаются пользователи сети и соответственное количество обращений
+
+```{r}
+top_domains <- dns%>%
+  count(query, sort = TRUE) %>%
+  as_tibble() %>% head(10)
+top_domains
+```
+```
+A tibble:10 × 2
+query
+<chr>
+n
+<int>
+teredo.ipv6.microsoft.com	39273	
+tools.google.com	14057	
+www.apple.com	13390	
+time.apple.com	13109	
+safebrowsing.clients.google.com	11658	
+*\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00	10401	
+WPAD	9134	
+44.206.168.192.in-addr.arpa	7248	
+HPE8AA67	6929	
+ISATAP	6569	
+```
+
+
+Опеределите базовые статистические характеристики (функция `summary()`) интервала времени между последовательными обращениями к топ-10 доменам
+
+```{r}
+library(lubridate)
+
+top_domains_data <- dns[dns$query %in% top_domains$query, ]
+top_domains_data <- top_domains_data[order(top_domains_data$query, top_domains_data$timestamp), ]
+results <- data.frame(
+  Domain = character(),
+  Min = numeric(),
+  Q1 = numeric(),
+  Median = numeric(),
+  Mean = numeric(),
+  Q3 = numeric(),
+  Max = numeric()
+)
+for(domain in top_domains$query) {
+  domain_data <- top_domains_data[top_domains_data$query == domain, ]
+  domain_data <- domain_data[!is.na(domain_data$timestamp), ]
+  
+  if(nrow(domain_data) > 1) {
+    time_diffs <- diff(as.numeric(domain_data$timestamp))
+    domain_stats <- summary(time_diffs)
+    results <- rbind(results, data.frame(
+      Domain = domain,
+      Min = as.numeric(domain_stats["Min."]),
+      Q1 = as.numeric(domain_stats["1st Qu."]),
+      Median = as.numeric(domain_stats["Median"]),
+      Mean = as.numeric(domain_stats["Mean"]),
+      Q3 = as.numeric(domain_stats["3rd Qu."]),
+      Max = as.numeric(domain_stats["Max."])
+    ))
+  }
+}
+results
+```
+```
+Domain
+Min
+Q1
+Median
+Mean
+Q3
+Max
+1
+teredo.ipv6.microsoft.com
+0
+0.0000000
+0.000000
+2.941409
+0.5100
+50387.76
+2
+tools.google.com
+0
+0.0000000
+0.000000
+8.187012
+1.0000
+50364.83
+3
+www.apple.com
+0
+0.0000000
+1.000000
+8.607446
+3.0100
+50963.63
+4
+time.apple.com
+0
+0.3699999
+1.760000
+8.665050
+4.7225
+50924.28
+5
+safebrowsing.clients.google.com
+0
+0.0000000
+1.000000
+10.003054
+2.0100
+49952.32
+6
+*\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+0
+0.1499999
+0.500000
+11.244317
+1.5000
+52723.50
+7
+WPAD
+0
+0.7500000
+0.750000
+12.608225
+1.1100
+50049.11
+8
+44.206.168.192.in-addr.arpa
+0
+2.0899999
+4.000000
+16.006259
+20.0900
+49679.81
+9
+HPE8AA67
+0
+0.7500000
+0.750000
+16.608906
+25.4900
+50044.43
+10
+ISATAP
+0
+0.7500000
+0.759999
+17.463671
+1.0500
+51997.79
+```
+
+Поиск признаков скрытого DNS-канала (периодические запросы)
+
+```{r}
+top_domains_query <- top_domains$query
+periodic_analysis <- data.frame(
+  source_ip = character(),
+  domain = character(),
+  request_count = integer(),
+  avg_interval = numeric(),
+  std_dev = numeric(),
+  is_periodic = logical()
+)
+for(domain in top_domains_query) {
+  domain_data <- dns[dns$query == domain, ]
+  domain_data <- domain_data[!is.na(domain_data$timestamp), ]
+  unique_ips <- unique(domain_data$source_ip)
+  for(ip in unique_ips) {
+    ip_data <- domain_data[domain_data$source_ip == ip, ]
+    if(nrow(ip_data) >= 5) {
+      ip_data <- ip_data[order(ip_data$timestamp), ]
+      timestamps <- as.numeric(ip_data$timestamp)
+      intervals <- diff(timestamps)
+      avg_interval <- mean(intervals)
+      std_dev <- sd(intervals)
+      is_periodic <- std_dev < avg_interval * 0.5
+      periodic_analysis <- rbind(periodic_analysis, data.frame(
+        source_ip = ip,
+        domain = domain,
+        request_count = nrow(ip_data),
+        avg_interval = avg_interval,
+        std_dev = std_dev,
+        is_periodic = is_periodic
+      ))
+    }
+  }
+}
+suspicious_ips <- periodic_analysis[periodic_analysis$is_periodic == TRUE, ] %>%
+  as_tibble()
+suspicious_ips
+```
+```
+source_ip
+domain
+request_count
+avg_interval
+std_dev
+is_periodic
+1
+192.168.25.25
+safebrowsing.clients.google.com
+8
+16.1828571
+0.520311327
+TRUE
+2
+192.168.24.25
+safebrowsing.clients.google.com
+8
+16.1528571
+0.164794250
+TRUE
+3
+192.168.21.25
+safebrowsing.clients.google.com
+7
+14.3333333
+4.604018536
+TRUE
+4
+192.168.25.25
+*\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+9
+1.5112500
+0.006408687
+TRUE
+5
+192.168.202.120
+WPAD
+14
+0.6561538
+0.296241411
+TRUE
+6
+192.168.202.49
+ISATAP
+90
+0.7668539
+0.120977029
+TRUE
+7
+192.168.0.3
+ISATAP
+108
+0.8743925
+0.312793797
+TRUE
+8
+192.168.202.146
+ISATAP
+6
+0.7540002
+0.027018332
+TRUE
+9
+192.168.202.147
+ISATAP
+33
+0.8615625
+0.146971721
+TRUE
+```
+
+Определите местоположение (страну, город) и организацию-провайдера для топ-10 доменов.
+
+```{r}
+get_location_info <- function(ip) {
+  if (is.na(ip) || ip == "") {
+     return(tibble(
+      ip_address = NA_character_,
+      country = "IP не определён",
+      city = "IP не определён",
+      isp = "IP не определён"
+    ))
+  }
+  if (grepl("^(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)", ip)) {
+    return(tibble(
+      ip_address = ip,
+      country = "Частный IP",
+      city = "Частный IP",
+      isp = "Частный IP"
+    ))
+  }
+  url <- paste0("http://ip-api.com/json/", ip)
+  response <- GET(url)
+  if (status_code(response) == 200) {
+    data <- fromJSON(content(response, "text"))
+    if (data$status == "success") {
+      return(tibble(
+        ip_address = ip,
+        country = data$country,
+        city = data$city,
+        isp = data$isp
+      ))
+    } else {
+      return(tibble(
+        ip_address = ip,
+        country = paste("API ошибка:", data$status),
+        city = paste("API ошибка:", data$status),
+        isp = paste("API ошибка:", data$status)
+      ))
+    }
+  } else {
+    return(tibble(
+      ip_address = ip,
+      country = "Ошибка API",
+      city = "Ошибка API",
+      isp = "Ошибка API"
+    ))
+  }
+}
+
+dns_with_dest_ip <- dns %>%
+  filter(!is.na(destination_ip)) %>%
+  select(query, destination_ip) %>%
+  distinct()
+
+relevant_dns <- dns_with_dest_ip %>%
+  filter(query %in% top_domains$query)
+
+location_results_df <- tibble(
+  ip_address = character(),
+  country = character(),
+  city = character(),
+  isp = character()
+)
+#Запросы к API
+unique_ips_to_check <- unique(relevant_dns$destination_ip)
+for (ip in unique_ips_to_check) {
+  location_info_row <- get_location_info(ip)
+  location_results_df <- bind_rows(location_results_df, location_info_row)
+}
+domain_location_info_final <- relevant_dns %>%
+  left_join(location_results_df, by = c("destination_ip" = "ip_address")) %>%
+  rename(ip_address = destination_ip) %>%
+  select(domain = query, ip_address, country, city, isp)
+domain_order_factor <- factor(domain_location_info_final$domain, levels = top_domains$query)
+domain_location_info_final_sorted <- domain_location_info_final %>%
+  mutate(domain_order = domain_order_factor) %>%
+  arrange(domain_order) %>%
+  select(-domain_order)
+
+print(domain_location_info_final_sorted)
+```
+```
+head
+	
+domain
+ip_address
+country
+city
+isp
+1
+teredo.ipv6.microsoft.com
+fec0:0:0:ffff::2
+Switzerland
+Morat
+Internet Assigned Numbers Authority
+2
+teredo.ipv6.microsoft.com
+fec0:0:0:ffff::1
+Switzerland
+Morat
+Internet Assigned Numbers Authority
+3
+teredo.ipv6.microsoft.com
+fec0:0:0:ffff::3
+Switzerland
+Morat
+Internet Assigned Numbers Authority
+4
+teredo.ipv6.microsoft.com
+192.168.207.4
+Частный IP
+Частный IP
+Частный IP
+5
+teredo.ipv6.microsoft.com
+192.168.0.1
+Частный IP
+Частный IP
+Частный IP
+```
+## Оценка результата
+
+В результате лабораторной работы мы развили практические навыки использования языка программирования R для обработки данных и закрепили знания базовых типов данных языка R
+
+## Вывод
+
+Таким образом, мы научились, используя программный пакет dplyr, анализировать DNS-логи с помощью языка программирования R
