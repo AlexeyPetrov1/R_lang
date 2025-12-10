@@ -1,0 +1,187 @@
+---
+title: "Lab 6: Analysis of Windows AD Logs"
+format:
+  md:
+    output-file: README.md
+editor:
+  markdown:
+    wrap: 72
+---
+
+## Цели лабораторной работы
+
+1.  Получение практического опыта в исследовании журналов Windows Active Directory.
+2.  Анализ структуры лог-файлов операционной системы Windows.
+3.  Применение языка R для парсинга и обработки данных.
+4.  Закрепление навыков работы с библиотеками экосистемы `tidyverse`.
+
+## Оборудование и ПО
+
+1.  ОС Windows 11 Pro
+2.  Среда разработки RStudio
+3.  Язык R версии 4.5.1
+
+## План выполнения
+
+1.  **Импорт:** Загрузить данные из архива (находится по ссылке `https://storage.yandexcloud.net/iamcth-data/dataset.tar.gz`).
+2.  **Очистка:** Привести данные к формату "tidy data", сконвертировать типы данных.
+3.  **Обзор:** Изучить структуру полученного датафрейма.
+4.  **Трансформация:** Развернуть вложенные списки (unnest) в плоскую таблицу.
+5.  **Оптимизация:** Удалить колонки, не несущие полезной информации (с одним уникальным значением).
+6.  **Анализ хостов:** Подсчитать количество уникальных хостов.
+7.  **Обогащение данных:** Получить описание Event_ID с сайта Microsoft и соединить с логами.
+8.  **Поиск угроз:** Найти события со статусом High и Medium.
+
+## Ход работы
+
+### 1. Подключение необходимых пакетов
+
+```{r}
+library(jsonlite)
+library(dplyr)
+library(tidyr)
+library(xml2)
+library(rvest)
+```
+
+### 2. Загрузка данных в среду R
+
+```{r}
+# Указываем путь к архиву
+local_archive <- "dataset.tar.gz"
+
+# Проверка наличия файла
+if (!file.exists(local_archive)) {
+  error_msg <- paste0("Файл архива не найден: ", local_archive, ". Проверьте рабочую директорию.")
+  stop(error_msg)
+}
+
+# Просматриваем содержимое архива
+archive_contents <- untar(tarfile = local_archive, list = TRUE)
+
+# Находим JSON файл внутри
+target_json <- archive_contents[grep("\\.json$", archive_contents)]
+
+# Распаковываем во временную папку
+temp_dir_path <- tempdir()
+untar(
+  tarfile = local_archive, 
+  files = target_json, 
+  exdir = temp_dir_path
+)
+
+# Формируем полный путь и читаем поток
+json_full_path <- file.path(temp_dir_path, target_json)
+connection_handler <- file(json_full_path, open = "r")
+
+log_data <- stream_in(connection_handler)
+
+close(connection_handler)
+
+
+```
+
+### 3. Приведение данных к аккуратному виду (преобразование типов)
+
+```{r}
+logs_clean <- log_data %>%
+  mutate(
+    timestamp = as.POSIXct(`@timestamp`, format = "%Y-%m-%dT%H:%M:%OSZ"),
+    across(where(is.character), ~na_if(., ""))
+  )
+
+cat("Данные преобразованы. Логов:", nrow(logs_clean), "Колонок:", ncol(logs_clean), "\n")
+
+```
+
+### 4. Просмотр структуры данных
+
+```{r}
+# Используем glimpse для быстрого обзора
+dplyr::glimpse(logs_clean)
+```
+
+### 5. "Выпрямление" датафрейма (удаление вложенности)
+
+```{r}
+for(col in names(logs_clean)) {
+  if(is.data.frame(logs_clean[[col]])) {
+    logs_clean <- logs_clean %>% unnest(all_of(col), names_sep = "_")
+  }
+}
+glimpse(logs_clean)
+  
+```
+
+### 6. Минимизация колонок (удаление констант)
+
+```{r}
+constant_cols <- c()
+for(col_name in names(logs_clean)) {
+  col_data <- logs_clean[[col_name]]
+  if(!is.list(col_data) && !is.data.frame(col_data)) {
+    sample_size <- min(1000, length(col_data))
+    unique_vals <- unique(na.omit(col_data[1:sample_size]))
+    if(length(unique_vals) <= 1) constant_cols <- c(constant_cols, col_name)
+  }
+}
+
+logs_clean <- logs_clean %>% select(-any_of(constant_cols))
+cat("Удалено колонок ", length(constant_cols), "\n")
+cat("Осталось колонок:", ncol(logs_clean), "\n")
+```
+
+### 7. Анализ количества хостов
+
+```{r}
+host_count <- logs_clean %>%
+  distinct(winlog_computer_name) %>%
+  nrow()
+
+cat("Количество хостов:", host_count, "\n")
+```
+
+### 8. Скрапинг описаний Event_ID и приведение типов
+
+```{r}
+ms_doc_url <- "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/appendix-l--events-to-monitor"
+page_content <- read_html(ms_doc_url)
+
+# Парсинг таблицы
+ms_event_table_raw <- html_table(page_content)[[1]]
+
+ms_event_info <- ms_event_table_raw %>%
+  mutate(
+    `Current Windows Event ID` = as.numeric(`Current Windows Event ID`),
+    `Legacy Windows Event ID`  = as.numeric(`Legacy Windows Event ID`),
+    `Potential criticality`    = as.character(`Potential Criticality`),
+    `Event Summary`            = as.character(`Event Summary`)
+  )
+
+head(ms_event_info, 10)
+```
+
+### 9. Анализ критичности событий (High/Medium)
+
+```{r}
+high_significance <- logs_clean %>%
+  filter(log_level %in% c("error"))
+
+medium_significance <- logs_clean %>%
+  filter(log_level %in% c("warning"))
+
+high_amount <- nrow(high_significance)
+medium_amount <- nrow(medium_significance)
+
+sprintf("Количество событий высокого уровня значимости: %d", high_amount)
+sprintf("Количество событий среднего уровня значимости: %d", medium_amount)
+sprintf("Общее количество: %d", high_amount + medium_amount)
+```
+
+## Итог
+
+В ходе работы был проведен анализ выгрузки SIEM-системы. Данные были очищены и обогащены информацией о критичности событий из официальной документации Microsoft.
+
+## Выводы
+
+Были успешно закреплены навыки работы с R: импорт JSON, обработка вложенных структур, очистка данных (tidy data) и веб-скрапинг справочной информации для обогащения датасета.
