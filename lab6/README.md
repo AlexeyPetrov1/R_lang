@@ -1,6 +1,6 @@
 
 # Lab 6: Analysis of Windows AD Logs
-
+lesha-petrow-2@yandex.ru
 
 ## Цели лабораторной работы
 
